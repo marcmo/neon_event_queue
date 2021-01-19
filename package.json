@@ -1,0 +1,14 @@
+{
+  "name": "neon_event_queue",
+  "version": "0.1.0",
+  "description": "",
+  "main": "lib/index.js",
+  "author": "Oliver Mueller <oliver.mueller@esrlabs.com>",
+  "license": "MIT",
+  "dependencies": {
+    "neon-cli": "^0.7.0"
+  },
+  "scripts": {
+    "install": "neon build"
+  }
+}
