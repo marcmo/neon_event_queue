@@ -9,10 +9,12 @@ exclude = ["artifacts.json", "index.node"]
 
 [lib]
 name = "neon_event_queue"
-crate-type = ["cdylib"]
+crate-type = ["dylib"]
 
 [build-dependencies]
 neon-build = "0.7.0"
 
 [dependencies]
 neon = { version = "0.7.0", default-features = false, features = ["napi-4", "event-queue-api"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
