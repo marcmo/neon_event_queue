@@ -48,7 +48,7 @@ impl RustSession {
     ) -> JsResult<'a, JsUndefined> {
         self.assigned_file = Some(assigned_file.into());
         let id = self.id.clone();
-        let callback = self.callback.clone(&mut cx);
+        let callback: Root<JsFunction> = self.callback.clone(&mut cx);
         let queue = Arc::clone(&self.queue);
 
         std::thread::spawn(move || {
