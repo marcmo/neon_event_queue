@@ -47,10 +47,13 @@ use std::sync::Arc;
 
 use neon::prelude::*;
 use serde::Serialize;
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
 
 #[derive(Debug, Serialize)]
-enum Events {
+enum Event {
     Update(usize),
+    Greeting(String),
     Done,
 }
 
@@ -60,60 +63,44 @@ pub struct RustSession {
     id: String,
     callback: Root<JsFunction>,
     assigned_file: Option<String>,
+    calculated_result: Option<u64>,
     shutdown: Option<Root<JsFunction>>,
     queue: Arc<EventQueue>,
 }
 
 impl RustSession {
-    fn send_js_event_queue<'a, C: Context<'a>, T: Serialize>(
-        mut cx: C,
+    fn send_js_event_queue<T: Serialize>(
         queue: Arc<EventQueue>,
         callback: Root<JsFunction>,
         event: T,
-    ) -> JsResult<'a, JsUndefined> {
+    ) {
         let js_string = serde_json::to_string(&event).expect("Serialization failed");
-        let callback = callback.into_inner(&mut cx);
-        let this = cx.undefined();
-        let args = vec![cx.string(js_string)];
+        queue.send(|mut cx| {
+            let callback = callback.into_inner(&mut cx);
+            let this = cx.undefined();
+            let args = vec![cx.string(js_string)];
 
-        callback.call(&mut cx, this, args)?;
-        Ok(cx.undefined())
+            callback.call(&mut cx, this, args)?;
+            Ok(())
+        });
     }
 
-    fn send_js_event<'a, C: Context<'a>, T: Serialize>(
-        &self,
+    fn assign<'a, C: Context<'a>>(
+        &mut self,
         mut cx: C,
-        event: T,
+        assigned_file: &str,
     ) -> JsResult<'a, JsUndefined> {
-        let callback = self.callback.clone(&mut cx);
-        let queue = Arc::clone(&self.queue);
-        RustSession::send_js_event_queue(cx, queue, callback, event)
-        // let js_string = serde_json::to_string(&event).expect("Serialization failed");
-        // let callback = callback.into_inner(&mut cx);
-        // let this = cx.undefined();
-        // let args = vec![cx.string(js_string)];
-
-        // callback.call(&mut cx, this, args)?;
-        // Ok(cx.undefined())
-    }
-
-    fn assign<'a, C: Context<'a>>(&self, mut cx: C) -> JsResult<'a, JsUndefined> {
+        self.assigned_file = Some(assigned_file.into());
         let id = self.id.clone();
         let callback = self.callback.clone(&mut cx);
         let queue = Arc::clone(&self.queue);
 
         std::thread::spawn(move || {
-            use std::{thread, time};
+            use std::time;
             thread::sleep(time::Duration::from_millis(1000));
-            queue.send(|mut cx| {
-                let callback = callback.into_inner(&mut cx);
-                let this = cx.undefined();
-                let args = vec![cx.string(id)];
-
-                callback.call(&mut cx, this, args)?;
-
-                Ok(())
-            })
+            RustSession::send_js_event_queue(queue, callback, Event::Update(100));
+            thread::sleep(time::Duration::from_millis(1000));
+            RustSession::send_js_event_queue(queue, callback, Event::Greeting(id))
         });
 
         Ok(cx.undefined())
@@ -152,6 +139,7 @@ pub fn session_new(mut cx: FunctionContext) -> JsResult<BoxedSession> {
         id,
         callback,
         assigned_file: None,
+        calculated_result: None,
         shutdown,
         queue: Arc::new(queue),
     }));
@@ -161,7 +149,8 @@ pub fn session_new(mut cx: FunctionContext) -> JsResult<BoxedSession> {
 
 pub fn session_assign(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let session = cx.argument::<BoxedSession>(0)?;
-    let session = session.borrow();
+    let file = cx.argument::<JsString>(1)?.value(&mut cx);
+    let mut session = session.borrow_mut();
 
-    session.assign(cx)
+    session.assign(cx, &file)
 }
